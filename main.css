@@ -16,6 +16,11 @@ h1 {
 	color: #820000;
 }
 
+
+html {
+  font-family: 'helvetica neue', helvetica, arial, sans-serif;
+}
+
 label {
 	width: 10em;
 	padding-right: 1em;
@@ -40,3 +45,63 @@ label {
 br {
 	clear: left;
 }
+
+
+/*   F o o t i e  T a b l e   */
+
+table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+  border: 3px solid navy;
+  background-color: #aed9ff;
+  background-image: url("EPL_logo.png");
+}
+
+thead th:nth-child(1) {
+  width: 10%;
+}
+
+thead th:nth-child(2) {
+  width: 20%;
+}
+
+thead th:nth-child(3) {
+  width: 30%;
+}
+
+thead th:nth-child(4) {
+  width: 35%;
+}
+
+th, td {
+  padding: 5px;
+}
+
+
+caption {
+  padding: 20px;
+  color: #666;
+  text-align: left;
+  letter-spacing: 1px;
+}
+/*
+th {
+  letter-spacing: 2px;
+}
+*/
+
+td {
+  letter-spacing: 1px;
+}
+
+tbody td {
+  text-align: center;
+}
+
+/*
+tfoot th {
+  text-align: right;
+}
+*/
+

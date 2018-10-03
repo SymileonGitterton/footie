@@ -47,6 +47,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       let thisTeam = myObject.teams[team]["shortName"];
       let teamNoString = "team"+team;
       let crestURL = myObject.teams[team]["crestUrl"];
+      let teamId = myObject.teams[team]["id"];
       console.log(teamNoString,thisTeam);
       //document.getElementById(teamNoString).innerHTML  = thisTeam;
 
@@ -54,7 +55,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       let newImgNode = document.createElement("img");
       newImgNode.src = crestURL;
       newImgNode.height = "35";
-      newImgNode.width = "35";
+      //newImgNode.width = "35";
       newTdNode0.appendChild(newImgNode);
       
       let newTdNode1 = document.createElement("td");
@@ -64,12 +65,16 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       let newTdNode2 = document.createElement("td");
       let textNode2 = document.createTextNode(teamNoString); 
       newTdNode2.appendChild(textNode2);
-
+      
+      let newTdNode3 = document.createElement("td");
+      let textNode3 = document.createTextNode(teamId); 
+      newTdNode3.appendChild(textNode3);
 
       let newRowNode = document.createElement("tr");
       newRowNode.appendChild(newTdNode0);
       newRowNode.appendChild(newTdNode1);
       newRowNode.appendChild(newTdNode2);
+      newRowNode.appendChild(newTdNode3);
 
       document.getElementById("myBody").appendChild(newRowNode);
 
