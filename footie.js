@@ -1,5 +1,15 @@
 'use strict';
 
+const CLUBS_IN_LEAGUE = 20;
+const RELEGATION_THRESOLD = 18;
+
+const POINTS_PER_WIN = 3;
+const POINTS_PER_DRAW = 1;
+const POINTS_PER_LOSS = 0;
+const MAX_POINTS_AVAILABLE = 2*(CLUBS_IN_LEAGUE-1)*POINTS_PER_WIN;
+const MIN_POINTS_AVAILABLE = 2*(CLUBS_IN_LEAGUE-1)*POINTS_PER_LOSS;
+
+
 let myObject = {};
 //console.log(myObject);
 
@@ -32,6 +42,11 @@ fetch('https://api.football-data.org/v2/competitions/PL/matches', {
     console.log(myMatch.homeTeam["name"]," ",myMatch.score.fullTime["homeTeam"],"-",myMatch.score.fullTime["awayTeam"]," ",myMatch.awayTeam["name"]);
   });
 
+
+
+
+// construct dictionary object of club objects
+let leagueClubs = {};
 fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 	      method: "GET",
         cache: "no-cache",
@@ -48,7 +63,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       let teamNoString = "team"+team;
       let crestURL = myObject.teams[team]["crestUrl"];
       let teamId = myObject.teams[team]["id"];
-      console.log(teamNoString,thisTeam);
+      //console.log(teamNoString,thisTeam);
       //document.getElementById(teamNoString).innerHTML  = thisTeam;
 
       let newTdNode0 = document.createElement("td");      
@@ -78,9 +93,23 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 
       document.getElementById("myBody").appendChild(newRowNode);
 
+      let thisClubId = myObject.teams[team]["id"];
+      let thisClub = {  "name":         myObject.teams[team]["shortName"],
+                        "crest":        myObject.teams[team]["crestUrl"],
+                        "won":          0,
+                        "drawn":        0,
+                        "lost":         0,
+                        "points":       0,
+                        "goalsFor":     0,
+                        "goalsAgainst": 0,
+                        "potentialPointsWorst": MIN_POINTS_AVAILABLE,
+                        "potentialPointsBest":  MAX_POINTS_AVAILABLE,
+                        "potentialFinishWorst": CLUBS_IN_LEAGUE,
+                        "potentialFinishBest": 1,
+      };
+      leagueClubs[thisClubId] = thisClub;
     }
+    console.log(leagueClubs);
+  });
 
-    });
 
-
-console.log("done\n");
