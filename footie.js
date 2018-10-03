@@ -10,43 +10,17 @@ const MAX_POINTS_AVAILABLE = 2*(CLUBS_IN_LEAGUE-1)*POINTS_PER_WIN;
 const MIN_POINTS_AVAILABLE = 2*(CLUBS_IN_LEAGUE-1)*POINTS_PER_LOSS;
 
 
-let myObject = {};
-//console.log(myObject);
+let leagueClubs = {};
+let incomingObjectTeams = {};
+let incomingObjectMatches = {};
 
+
+// football-data.org credential
 let footballHeaders = new Headers();
 footballHeaders.append("X-Auth-Token", "102c4a1fda584443861d8e3f4fe4096e");
 
-fetch('https://api.football-data.org/v2/competitions/PL/matches', {
-        method: "GET", // *GET, POST, PUT, DELETE, etc.
-        //mode: "cors", // no-cors, cors, *same-origin
-        cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
-        //credentials: "same-origin", // include, same-origin, *omit
-        //headers: {
-        //  "X-Auth-Token": "102c4a1fda584443861d8e3f4fe4096e",
-            //"Content-Type": "application/json; charset=utf-8",
-            // "Content-Type": "application/x-www-form-urlencoded",
-        //},
-        headers: footballHeaders,
-        //redirect: "follow", // manual, *follow, error
-        //referrer: "no-referrer", // no-referrer, *client
-        //body: JSON.stringify(data), // body data type must match "Content-Type" header)
-      })
-  .then(function(response) {
-    return response.json();
-  })
-  .then(function(myJson) {
-    let matchOfTheDay = 69;
-    myObject = JSON.parse(JSON.stringify(myJson));
-    let myMatch = myObject.matches[matchOfTheDay];
-    console.log("Match of the Day is no.",matchOfTheDay,"\n");
-    console.log(myMatch.homeTeam["name"]," ",myMatch.score.fullTime["homeTeam"],"-",myMatch.score.fullTime["awayTeam"]," ",myMatch.awayTeam["name"]);
-  });
-
-
-
 
 // construct dictionary object of club objects
-let leagueClubs = {};
 fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 	      method: "GET",
         cache: "no-cache",
@@ -56,15 +30,13 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
     return response.json();
   })
   .then(function(myJson) {
-    myObject = JSON.parse(JSON.stringify(myJson));
-    console.log(myObject);
-    for (let team=0; team<myObject.teams.length;team++) {
-      let thisTeam = myObject.teams[team]["shortName"];
+    incomingObjectTeams = JSON.parse(JSON.stringify(myJson));
+    console.log(incomingObjectTeams);
+    for (let team=0; team<incomingObjectTeams.teams.length;team++) {
+      let thisTeam = incomingObjectTeams.teams[team]["shortName"];
       let teamNoString = "team"+team;
-      let crestURL = myObject.teams[team]["crestUrl"];
-      let teamId = myObject.teams[team]["id"];
-      //console.log(teamNoString,thisTeam);
-      //document.getElementById(teamNoString).innerHTML  = thisTeam;
+      let crestURL = incomingObjectTeams.teams[team]["crestUrl"];
+      let teamId = incomingObjectTeams.teams[team]["id"];
 
       let newTdNode0 = document.createElement("td");      
       let newImgNode = document.createElement("img");
@@ -93,9 +65,9 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 
       document.getElementById("myBody").appendChild(newRowNode);
 
-      let thisClubId = myObject.teams[team]["id"];
-      let thisClub = {  "name":         myObject.teams[team]["shortName"],
-                        "crest":        myObject.teams[team]["crestUrl"],
+      let thisClubId = incomingObjectTeams.teams[team]["id"];
+      let thisClub = {  "name":         incomingObjectTeams.teams[team]["shortName"],
+                        "crest":        incomingObjectTeams.teams[team]["crestUrl"],
                         "won":          0,
                         "drawn":        0,
                         "lost":         0,
@@ -110,6 +82,21 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       leagueClubs[thisClubId] = thisClub;
     }
     console.log(leagueClubs);
+  })
+  .then(function() {
+    // now unwrap the matches and tally points
+    fetch('https://api.football-data.org/v2/competitions/PL/matches', {
+        method: "GET",
+        cache: "no-cache",
+        headers: footballHeaders,
+      })
+  .then(function(response) {
+    return response.json();
+  })
+  .then(function(myJson) {
+    incomingObjectMatches = JSON.parse(JSON.stringify(myJson));
+    console.log(incomingObjectMatches);
   });
+});
 
 
