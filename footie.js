@@ -91,18 +91,45 @@ let constructTheChart = function() {
 };
 
 let populateTheChart = function() {
-  for (let team in leagueClubs) {
-    
-  //if (leagueClubs.hasOwnProperty(leagueTable[row].club)) {
-  //}
+  let myTableBody = document.getElementById("myFootieTableBody");
+  let myTableRows = myTableBody.getElementsByTagName("tr");
+  console.log(myTableRows);
+  console.log("length is "+myTableRows.length);
+  for (let row=0; row<leagueTable.length; row++) {  
+    let currentRow = myTableRows[row];
+    let myRowCells = currentRow.getElementsByTagName("td");
+    // put position in col 0
+    //console.log("row "+row);
+    //console.log("cell 0 contains "+myRowCells[0].innerHTML+", replacing with "+leagueTable[row].position+"\n");
+    myRowCells[0].innerHTML = leagueTable[row].position;    
+    if (leagueClubs.hasOwnProperty(leagueTable[row].club)) {
+      let currentClub = leagueClubs[leagueTable[row].club];
+      
+      // do the crest logo in cell 1
+      console.log(myRowCells[1]);
+      let newTdNode = document.createElement("td");
+      let newImgNode = document.createElement("img");
+      newImgNode.src = currentClub.crest;
+      newImgNode.height = "35";
+      //newImgNode.width = "35";
+      newTdNode.appendChild(newImgNode);
+      myRowCells[1].replaceWith(newTdNode);
+      console.log(myRowCells[1]);
+      
+      // do the rest, columns 2-n
+      for (let column=2;column<tableHeaderNames.length;column++) {
+        let newTdNode = document.createElement("td");
+        let newTextNode = document.createTextNode(currentClub[tableHeaderNames[column].colvalue]);
+        newTdNode.appendChild(newTextNode);
+        myRowCells[column].replaceWith(newTdNode);
+      }
 
+    }
+  }
+};
+    /*
   // col 0
-  let newTdNode0 = document.createElement("td");
-  let newImgNode = document.createElement("img");
-  newImgNode.src = leagueClubs[team].crest;
-  newImgNode.height = "35";
-    //newImgNode.width = "35";
-    newTdNode0.appendChild(newImgNode);
+
     
     // cols 1-n
     for(let i=1; i<leagueClubs.lengt; i++) {  
@@ -130,7 +157,7 @@ let populateTheChart = function() {
     }
   }
 };
-
+*/
 
 
 constructTheTable();
@@ -204,11 +231,9 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
   let tableRow=0;
   for(let club in leagueClubs) {
     if (tableRow < leagueTable.length) {
-      //console.log("cloob "+club+"\n");
       leagueTable[tableRow].position  = parseInt(leagueClubs[club].position,10)-parseInt(club,10);
       leagueTable[tableRow].club      = parseInt(club,10);
       leagueTable[tableRow].points    = leagueClubs[club].points;
-      //console.log(leagueTable[tableRow]);
       tableRow++;
     } else {
       console.log("table row overflow\n");
@@ -219,6 +244,9 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
   // sort the teams in the table and assign positions
   console.log("now sort\n")
   //leagueTable[i] = {"position":0, "club":-1, "points":0};    // no club assigned to this position
+  
+  // now show it
+  populateTheChart();
 
   });
 });
