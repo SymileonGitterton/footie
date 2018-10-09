@@ -37,15 +37,16 @@ const tableHeaderNames = [{"colname":" ",       "colvalue":"position"},
 // global objects
 let leagueClubs = {};
 let leagueTable = [];
-//let incomingObjectTeams = {};
-//let incomingObjectMatches = {};
 let compressedGrid = [];
-let gridKeys = [];
+
+// note: having a separate LeagueTable object allows for some teams to have the same position value, e.g second equal
+// otherwise we would just index on position obviously. 
+// In fact the simulator does exactly that, using the compressedGrid / workingGrid objects
 
 // compressedGrid structure:
 //
 // 20 rows of home team
-//   each row has 20 entries (19 opponents, self)
+//   each row has 21 entries (19 opponents, self, [id,points] )
 //      each entry is a two-element array [homeTeamPoints, awaayTeamPoints] aka [US, THEM]
 
 
@@ -55,7 +56,7 @@ footballHeaders.append("X-Auth-Token", "102c4a1fda584443861d8e3f4fe4096e");
 
 
 let constructTheCompressedGrid = function() {
-  gridKeys = Object.keys(leagueClubs);
+  let gridKeys = Object.keys(leagueClubs);
   for (let i=0;i<gridKeys.length;i++) {
     let someClubId = gridKeys[i];
     let someClub = leagueClubs[someClubId];
@@ -180,7 +181,8 @@ let populateTheChart = function() {
 };
 
 
-let sortTableByPoints = function(a,b) { 
+let compareFunction_sortTableByPoints = function(a,b) { 
+  // compares two LeagueTable entries
   if (leagueClubs[b.club].points !== leagueClubs[a.club].points) {
     return (leagueClubs[b.club].points - leagueClubs[a.club].points)
   } else {
@@ -193,9 +195,10 @@ let sortTableByPoints = function(a,b) {
 };
 
 
-let sortGridByPoints = function(a,b) {
-  clubIdA = a[CLUBS_IN_LEAGUE][ID];
-  clubIdB = b[CLUBS_IN_LEAGUE][ID];
+let compareFunction_sortGridByPoints = function(a,b) {
+  // compares two compressedGrid entries
+  return (b[CLUBS_IN_LEAGUE][POINTS] - a[CLUBS_IN_LEAGUE][POINTS]);
+  // ot looking at goal difference etc. as this is not simulated; can adjust GD arbitrarily.
 }; 
 
 
@@ -320,7 +323,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
     console.log(dummyTable1);
 
 
-    leagueTable.sort(sortTableByPoints);
+    leagueTable.sort(compareFunction_sortTableByPoints);
 
 
     for (let i=0;i<leagueTable.length;i++) {
@@ -352,7 +355,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
     populateTheChart();
 
     // now simulate for worst position
-    console.log("compressedGrid:");
+    console.log("\ncompressedGrid:");
     console.log(compressedGrid);
 
     // 2. for each club...
@@ -374,10 +377,25 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
         inYourDreams += homeGames[opponent][US];
         inYourDreams += awayGames[opponent][THEM];
       }
-      console.log(leagueClubs[gridKeys[clubUnderTest]].name+" (row "+clubUnderTest+") could finish with "+inYourDreams+" points this season");
-      console.log("perfectGrid:");
-      console.log(perfectGrid);
-      perfectGrid = perfectGrid.sort(sortGridByPoints);
+      perfectGrid[clubUnderTest][CLUBS_IN_LEAGUE][POINTS] = inYourDreams;
+
+      let thisClubName = leagueClubs[compressedGrid[clubUnderTest][CLUBS_IN_LEAGUE][ID]].name;
+      console.log("\nrow "+clubUnderTest+"  "+thisClubName+" could finish with "+inYourDreams+" points this season");
+      console.log("\nperfectGrid unsorted:");
+      let dummyTable3 = JSON.parse(JSON.stringify(perfectGrid));
+      console.log(dummyTable3);
+
+      perfectGrid = perfectGrid.sort(compareFunction_sortGridByPoints);
+      
+      console.log("\nperfectGrid after sort by points (ignoring GD):");
+      let dummyTable4 = JSON.parse(JSON.stringify(perfectGrid));
+      console.log(dummyTable4);
+
+      for (let i=0; i<perfectGrid.length; i++) {
+        let thisClubName   = leagueClubs[perfectGrid[i][CLUBS_IN_LEAGUE][ID]].name;
+        let thisClubPoints = [perfectGrid[i][CLUBS_IN_LEAGUE][POINTS]];
+        console.log((i+1)+" "+thisClubName+" "+thisClubPoints);
+      }
       // heuristic: try to get this club to #1
       // 0.  give this club all wins
       // ...evaluate and sort by points
