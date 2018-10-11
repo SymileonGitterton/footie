@@ -241,6 +241,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
                         "potentialFinishBest": 1,
                         "position": 0,
                         "results": thisClubResults,
+                        "paddedName": "TBD",
       };
       leagueClubs[thisClubId] = thisClub;       // add the club to the clubs collection
     }
@@ -391,11 +392,12 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       let dummyTable4 = JSON.parse(JSON.stringify(perfectGrid));
       console.log(dummyTable4);
 
-      for (let i=0; i<perfectGrid.length; i++) {
-        let thisClubName   = leagueClubs[perfectGrid[i][CLUBS_IN_LEAGUE][ID]].name;
-        let thisClubPoints = [perfectGrid[i][CLUBS_IN_LEAGUE][POINTS]];
-        console.log((i+1)+" "+thisClubName+" "+thisClubPoints);
-      }
+      //for (let i=0; i<perfectGrid.length; i++) {
+      //  let thisClubName   = leagueClubs[perfectGrid[i][CLUBS_IN_LEAGUE][ID]].name;
+      //  let thisClubPoints = [perfectGrid[i][CLUBS_IN_LEAGUE][POINTS]];
+      //  console.log((i+1)+" "+thisClubName+" "+thisClubPoints);
+      //}
+
       // heuristic: try to get this club to #1
       // 0.  give this club all wins
       // ...evaluate and sort by points
@@ -410,8 +412,8 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 
 
       // how to handle GD? only matters if we are first-equal.
-
-
+      generatePaddedNames(); // move to after leagueClubs is filled
+      printGrid(perfectGrid);
     }
 
     // brute force exhaustive. THis will never finish.
@@ -420,7 +422,65 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
     // redisplay with new info
     populateTheChart();
 
+
   });
 });
 
+let maxNameLength = 0;
+
+let generatePaddedNames = function() {
+  let maxNameLength = 0;
+  for (let club in leagueClubs) {
+    if (leagueClubs[club].name.length > maxNameLength) {
+      maxNameLength = leagueClubs[club].name.length;
+    }
+  }
+  //console.log(maxNameLength,"longest name letters");
+  for (let club in leagueClubs) {
+    let padSize = maxNameLength - leagueClubs[club].name.length + 1;
+    let paddedName = new Array(padSize).join(" ")+leagueClubs[club].name;
+    console.log(paddedName);
+    leagueClubs[club].paddedName = paddedName;
+  }
+};
+
+
+let printGrid = function(grid) {
+
+  let row0 = grid[0];
+  let rowIdElement = row0.length-1;
+  let clubId0 = row0[rowIdElement][ID];
+  let paddedLength = leagueClubs[clubId0].paddedName.length;
+  
+  let leftString = new Array(paddedLength+1).join(" ");
+
+  for (let v=0; v<paddedLength; v++) {
+    let newString = leftString;
+    for (let row=0; row<grid.length; row++) {
+      let clubId = grid[row][rowIdElement][ID];
+      //newString.push(leagueClubs[clubId].paddedName[v]);
+      newString = newString+" "+leagueClubs[clubId].paddedName[v];
+    }
+    console.log(newString);
+  }
+
+
+  for (let row=0;row<grid.length;row++) {
+    let currentRow = grid[row];
+    let clubId = currentRow[currentRow.length-1][ID];
+    //console.log(leagueClubs[clubId].name);
+
+    // now display points or '.' for self-self
+    let currentResults = grid[row];
+    let resultsCount = currentResults.length;//-1;    
+    let homeResultsString = leagueClubs[clubId].paddedName;
+    let awayResultsString = leftString+" ";
+    for (let result=0; result<resultsCount; result++) {
+      homeResultsString = homeResultsString+" "+currentResults[row][US];
+      awayResultsString = awayResultsString+" "+currentResults[row][THEM];
+    }
+    console.log(homeResultsString,"\n");
+    console.log(awayResultsString,"\n");
+  }
+};
 
