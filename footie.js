@@ -35,13 +35,10 @@ const tableHeaderNames = [{"colname":" ",       "colvalue":"position"},
                           ];
 
 // global objects
-let leagueClubs = {};
-let leagueTable = [];
-let compressedGrid = [];
-
-// note: having a separate LeagueTable object allows for some teams to have the same position value, e.g second equal
-// otherwise we would just index on position obviously. 
-// In fact the simulator does exactly that, using the compressedGrid / workingGrid objects
+let leagueClubs = [];     // sparse array indexed by clubId
+let leagueClubIndex = []; // compressed directory of ids
+let leagueStandings = []; // {id, points, position} sorted into postional order (position might not be unique)
+let compressedGrid = [];  // always in clubId order
 
 // compressedGrid structure:
 //
@@ -50,37 +47,31 @@ let compressedGrid = [];
 //      each entry is a two-element array [homeTeamPoints, awaayTeamPoints] aka [US, THEM]
 
 
-// football-data.org credential
+// football-data.org API auth credential
 let footballHeaders = new Headers();
 footballHeaders.append("X-Auth-Token", "102c4a1fda584443861d8e3f4fe4096e");
 
 
 let constructTheCompressedGrid = function() {
-  let gridKeys = Object.keys(leagueClubs);
-  for (let i=0;i<gridKeys.length;i++) {
-    let someClubId = gridKeys[i];
-    let someClub = leagueClubs[someClubId];
-    
-    // construct a results row for some club, using someClub.results
+  for (let homeRow=0; homeRow<CLUBS_IN_LEAGUE; homeRow++) {
     let newGridRow = [];
-    for (let away=0;away<gridKeys.length;away++) {
-      if (i === away) {
-        newGridRow[away] = [0, 0]; // 0 points for playing against yourself
+    for (let awayColumn=0;awayColumn<CLUBS_IN_LEAGUE;awayColumn++) {
+      if (awayColumn === homeRow) {
+        newGridRow[awayColumn] = [0, 0]; // 0 points for playing against yourself
       } else {
-        newGridRow[away] = someClub.results[gridKeys[away]];
+        newGridRow[awayColumn] = leagueClubs[leagueClubIndex[homeRow]].results[leagueClubIndex[awayColumn]]; 
       }
     }
-    newGridRow[gridKeys.length] = [someClubId,someClub.points];   // append id and points for later use
-    compressedGrid[i] = newGridRow;                               // add the new row to the compressed grid
+    compressedGrid[homeRow] = newGridRow;
   }
-}
+};
 
-// copy grid of known structure (array of array of arrays)
+
+// copy grid of known structure (array[20] of array[20] of array[2])
 let deepCopyGrid = function(gridToCopy) {
   let newGrid = [];
   let rowCount = gridToCopy.length;
   let matchCount = gridToCopy[0].length;  // includes the extra entry [id, points]
-  //let elementCount = gridToCopy[0][0].length;  // guaranteed to be a defined entry, it's a self-self
   for (let row=0; row<rowCount; row++) {
     let newRow = [];
     newGrid[row] = newRow;
@@ -95,13 +86,6 @@ let deepCopyGrid = function(gridToCopy) {
   }
   return(newGrid);
 }
-
-
-let constructTheTable = function() {
-  for(let i=0;i<CLUBS_IN_LEAGUE;i++) {
-    leagueTable[i] = {"position":0, "club":-1};    // no club assigned to this position
-  }
-};
 
 
 let constructTheChart = function() {
@@ -149,6 +133,7 @@ let constructTheChart = function() {
 
 };
 
+
 let generatePaddedNames = function() {
   let maxNameLength = 0;
   for (let club in leagueClubs) {
@@ -164,17 +149,18 @@ let generatePaddedNames = function() {
   }
 };
 
+
 let populateTheChart = function() {
   let myTableBody = document.getElementById("myFootieTableBody");
   let myTableRows = myTableBody.getElementsByTagName("tr");
-  for (let row=0; row<leagueTable.length; row++) {  
+  for (let row=0; row<CLUBS_IN_LEAGUE; row++) {  
     let currentRow = myTableRows[row];
     let myRowCells = currentRow.getElementsByTagName("td");
 
     // put position in col 0
-    myRowCells[0].innerHTML = leagueTable[row].position;    
-    if (leagueClubs.hasOwnProperty(leagueTable[row].club)) {
-      let currentClub = leagueClubs[leagueTable[row].club];
+    myRowCells[0].innerHTML = leagueStandings[row].position;    
+    if (leagueClubs.hasOwnProperty(leagueStandings[row].clubId)) {
+      let currentClub = leagueClubs[leagueStandings[row].clubId];
       
       // do the crest logo in cell 1
       let newTdNode = document.createElement("td");
@@ -196,15 +182,62 @@ let populateTheChart = function() {
 };
 
 
-let compareFunction_sortTableByPoints = function(a,b) { 
-  // compares two LeagueTable entries
-  if (leagueClubs[b.club].points !== leagueClubs[a.club].points) {
-    return (leagueClubs[b.club].points - leagueClubs[a.club].points)
+let compareFunction_sortStandingsByPoints = function(a,b) {
+  let clubA = leagueClubs[a.clubId];
+  let clubB = leagueClubs[b.clubId];
+
+  if (clubB.points !== clubA.points) {
+    return (clubB.points - clubA.points);
   } else {
-    if (leagueClubs[b.club].goalDifference !== leagueClubs[a.club].goalDifference) {
-      return (leagueClubs[b.club].goalDifference - leagueClubs[a.club].goalDifference)
+    if (clubB.goalDifference !== clubA.goalDifference) {
+      return (clubB.goalDifference - clubA.goalDifference);
     } else {
-      return (leagueClubs[b.club].goalsFor - leagueClubs[a.club].goalsFor);
+      return (clubB.goalsFor - clubA.goalsFor);
+    }
+  }
+}
+
+
+let calculateStandings = function(grid) {
+  let newStandings = [];
+  // from a grid of results, work out points per club... 
+  for (let row=0; row<CLUBS_IN_LEAGUE; row++) {
+    let clubPoints = 0;
+    for (let column=0; column<CLUBS_IN_LEAGUE; column++) {
+      if (grid[row][column] != null) {          // (== null) comparision matches undefined
+        clubPoints += grid[row][column][US];    // add home game points
+      }
+      if (grid[column][row] != null) {          // (== null) comparision matches undefined
+        clubPoints += grid[column][row][THEM];  // add away game points
+      }
+    }
+    newStandings[row] = {"clubId":   leagueClubIndex[row],
+                         "position": -1,
+                         "points":   clubPoints};
+  }
+
+  // then sort using EPL tie-breaker rules into position order
+  newStandings.sort(compareFunction_sortStandingsByPoints);
+
+  // and from that, generate positional information
+  // for now this is just matching the ordering from the sort, but 2= etc. could be possible
+  for (let row=0; row<CLUBS_IN_LEAGUE; row++) {
+    newStandings[row].position = row+1;
+  }
+
+  return newStandings;
+};
+
+
+let compareFunction_sortLeagueClubsByPoints = function(a,b) { 
+  // compares two LeagueTable entries
+  if (b.points !== a.points) {
+    return (b.points - a.points)
+  } else {
+    if (b.goalDifference !== a.goalDifference) {
+      return (b.goalDifference - a.goalDifference)
+    } else {
+      return (b.goalsFor - a.goalsFor);
     }
   }
 };
@@ -221,12 +254,10 @@ let compareFunction_sortGridByPoints = function(a,b) {
 // begin execution here
 //=================================================
 
-constructTheTable();
-constructTheChart();
-
+constructTheChart();    // basic html table setup
 
 // construct dictionary object of club objects
-// and build the 20x20 match grid
+// and build the 20x20x2 match grid
 fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 	      method: "GET",
         cache: "no-cache",
@@ -259,6 +290,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
                         "paddedName": "TBD",
       };
       leagueClubs[thisClubId] = thisClub;       // add the club to the clubs collection
+      leagueClubIndex.push(thisClubId);         // make list of club ids. to be sorted later
     }
     generatePaddedNames();
   })
@@ -269,11 +301,9 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
         cache: "no-cache",
         headers: footballHeaders,
     })
-  //}) // change?
   .then(function(response) {
     return response.json();
   })
-  //.then(function(myJson) {
   .then(function(incomingObjectMatches) {
     // calculate goals and points per club by parsing all match records
     for (let i=0; i<incomingObjectMatches.matches.length; i++) {
@@ -320,38 +350,15 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
         away.goalDifference = away.goalsFor-away.goalsAgainst;
       }
     }
+    leagueClubIndex.sort(function(a,b) { return (parseInt(a) - parseInt(b)) });    // numeric sort
+    constructTheCompressedGrid();     // id order
 
-    // insert the teams into the table in object order (meaningless), taking data from club record
-    let tableRow=0;
-    for(let club in leagueClubs) {
-      if (tableRow < leagueTable.length) {
-        leagueTable[tableRow].position  = parseInt(leagueClubs[club].position,10)-parseInt(club,10);
-        leagueTable[tableRow].club      = parseInt(club,10);
-        leagueTable[tableRow].points    = leagueClubs[club].points;
-        tableRow++;
-      } else {
-        console.log("table row overflow\n");
-      }
-    }
+    leagueStandings = calculateStandings(compressedGrid);
 
-    // then sort the teams in the table by points
-    console.log("\nleagueTable unsorted:");
-    let dummyTable1 = JSON.parse(JSON.stringify(leagueTable));
+    // let's see it in the console
+    console.log("\nleagueStandings after sort");
+    let dummyTable1 = JSON.parse(JSON.stringify(leagueStandings));
     console.log(dummyTable1);
-
-
-    leagueTable.sort(compareFunction_sortTableByPoints);
-
-
-    for (let i=0;i<leagueTable.length;i++) {
-      leagueTable[i].position = i+1;
-    }
-
-    console.log("\nleagueTable after sort");
-    let dummyTable2 = JSON.parse(JSON.stringify(leagueTable));
-    console.log(dummyTable2);
-
-    // should sort out case wen teams are truly equal through all tie-breakers?
 
     // now show it
     populateTheChart();
@@ -385,7 +392,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       let inYourDreams = 0;
 
       // set remainder of season to perfect
-      for (let opponent=0; opponent<(perfectGrid[clubUnderTest].length-1); opponent++) {   // -1 because don't look at the [id, points] entry
+      for (let opponent=0; opponent<CLUBS_IN_LEAGUE; opponent++) {   // -1 because don't look at the [id, points] entry
         
 
         //if (homeGames[opponent] == null) {                          // home game not played yet...
@@ -411,10 +418,11 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
         inYourDreams += perfectGrid[clubUnderTest][opponent][US];
         inYourDreams += perfectGrid[opponent][clubUnderTest][THEM];
       }
-      perfectGrid[clubUnderTest][CLUBS_IN_LEAGUE][POINTS] = inYourDreams;
+      //perfectGrid[clubUnderTest][CLUBS_IN_LEAGUE][POINTS] = inYourDreams;
       //calculateGridPoints(perfectGrid);
 
-      let thisClubName = leagueClubs[compressedGrid[clubUnderTest][CLUBS_IN_LEAGUE][ID]].name;
+      //let thisClubName = leagueClubs[compressedGrid[clubUnderTest][CLUBS_IN_LEAGUE][ID]].name;
+      let thisClubName = leagueClubs[leagueClubIndex[clubUnderTest]].name;
       console.log("\nrow "+clubUnderTest+"  "+thisClubName+" could finish with "+inYourDreams+" points this season");
       console.log("\nperfectGrid unsorted:");
       let dummyTable3 = JSON.parse(JSON.stringify(perfectGrid));
@@ -423,7 +431,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 
 
 
-      perfectGrid = perfectGrid.sort(compareFunction_sortGridByPoints);
+      //perfectGrid = perfectGrid.sort(compareFunction_sortGridByPoints);
 
       // OH MY GOD need to juggle COLUMNS if we move rows around!!!
       // maybe I should stick with a sparse grid?
@@ -472,8 +480,9 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 
 let printGrid = function(grid) {
   let row0 = grid[0];
-  let rowIdElement = row0.length-1;
-  let clubId0 = row0[rowIdElement][ID];
+  //let rowIdElement = row0.length-1;
+  //let clubId0 = row0[rowIdElement][ID];
+  let clubId0 = leagueClubIndex[0];
   let paddedLength = leagueClubs[clubId0].paddedName.length;
   
   let leftString = new Array(paddedLength+1).join(" ");
@@ -481,7 +490,8 @@ let printGrid = function(grid) {
   for (let v=0; v<paddedLength; v++) {
     let newString = leftString;
     for (let row=0; row<grid.length; row++) {
-      let clubId = grid[row][rowIdElement][ID];
+      //let clubId = grid[row][rowIdElement][ID];
+      let clubId = leagueClubIndex[row];
       newString = newString+"  "+leagueClubs[clubId].paddedName[v];
     }
     console.log(newString);
@@ -489,12 +499,13 @@ let printGrid = function(grid) {
 
   for (let row=0;row<grid.length;row++) {
     let currentRow = grid[row];
-    let clubId = currentRow[currentRow.length-1][ID];
+    //let clubId = currentRow[currentRow.length-1][ID];
+    let clubId = leagueClubIndex[row];
     //console.log(leagueClubs[clubId].name);
 
     // now display points or '.' for self-self
     let currentResults = grid[row];
-    let resultsCount = currentResults.length-1;    
+    let resultsCount = currentResults.length;//-1;    
     let homeResultsString = leagueClubs[clubId].paddedName;
     let awayResultsString = leftString+" ";
     for (let result=0; result<resultsCount; result++) {
