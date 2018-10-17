@@ -63,6 +63,8 @@ let constructTheCompressedGrid = function() {
       }
     }
     compressedGrid[homeRow] = newGridRow;
+    //let dummyCG = JSON.parse(JSON.stringify(compressedGrid));
+    //console.log(dummyCG);
   }
 };
 
@@ -182,7 +184,7 @@ let populateTheChart = function() {
 };
 
 
-let compareFunction_sortStandingsByPoints = function(a,b) {
+let compareFunction_sortStandingsByPointsAndTieBreakers = function(a,b) {
   let clubA = leagueClubs[a.clubId];
   let clubB = leagueClubs[b.clubId];
 
@@ -198,7 +200,7 @@ let compareFunction_sortStandingsByPoints = function(a,b) {
 }
 
 
-let calculateStandings = function(grid) {
+let calculateStandings = function(grid, useTieBreakers) {
   let newStandings = [];
   // from a grid of results, work out points per club... 
   for (let row=0; row<CLUBS_IN_LEAGUE; row++) {
@@ -216,8 +218,12 @@ let calculateStandings = function(grid) {
                          "points":   clubPoints};
   }
 
-  // then sort using EPL tie-breaker rules into position order
-  newStandings.sort(compareFunction_sortStandingsByPoints);
+  if (useTieBreakers) {
+    // then sort using EPL tie-breaker rules into position order
+    newStandings.sort(compareFunction_sortStandingsByPointsAndTieBreakers);
+  } else {
+    newStandings.sort(function(a,b) {return (b.points - a.points) });
+  }
 
   // and from that, generate positional information
   // for now this is just matching the ordering from the sort, but 2= etc. could be possible
@@ -229,25 +235,77 @@ let calculateStandings = function(grid) {
 };
 
 
-let compareFunction_sortLeagueClubsByPoints = function(a,b) { 
-  // compares two LeagueTable entries
-  if (b.points !== a.points) {
-    return (b.points - a.points)
-  } else {
-    if (b.goalDifference !== a.goalDifference) {
-      return (b.goalDifference - a.goalDifference)
-    } else {
-      return (b.goalsFor - a.goalsFor);
+let printGrid = function(grid) {
+  let row0 = grid[0];
+  let clubId0 = leagueClubIndex[0];
+  let paddedLength = leagueClubs[clubId0].paddedName.length;
+  
+  let leftString = new Array(paddedLength+1).join(" ");
+
+  for (let v=0; v<paddedLength; v++) {
+    let newString = leftString;
+    for (let row=0; row<grid.length; row++) {
+      //let clubId = grid[row][rowIdElement][ID];
+      let clubId = leagueClubIndex[row];
+      newString = newString+"  "+leagueClubs[clubId].paddedName[v];
     }
+    console.log(newString);
+  }
+
+  for (let row=0;row<grid.length;row++) {
+    let currentRow = grid[row];
+    let clubId = leagueClubIndex[row];
+
+    // now display points
+    let currentResults = grid[row];
+    let resultsCount = currentResults.length;//-1;    
+    let homeResultsString = leagueClubs[clubId].paddedName;
+    let awayResultsString = leftString+" ";
+    for (let result=0; result<resultsCount; result++) {
+      if (currentResults[result] == null) {
+        homeResultsString = homeResultsString+"  "+"-";
+        awayResultsString = awayResultsString+"  "+"-";
+      } else {
+        homeResultsString = homeResultsString+"  "+currentResults[result][US];
+        awayResultsString = awayResultsString+"  "+currentResults[result][THEM];
+      }
+    }
+    console.log(homeResultsString,"\n");
+    console.log(awayResultsString,"\n");
   }
 };
 
 
-let compareFunction_sortGridByPoints = function(a,b) {
-  // compares two compressedGrid entries
-  return (b[CLUBS_IN_LEAGUE][POINTS] - a[CLUBS_IN_LEAGUE][POINTS]);
-  // ot looking at goal difference etc. as this is not simulated; can adjust GD arbitrarily.
-}; 
+let printStandings = function(standings) {
+  for (let row=0; row<CLUBS_IN_LEAGUE; row++) {
+    let clubName = leagueClubs[standings[row].clubId].paddedName;
+    console.log(standings[row].position+" "+clubName+" "+standings[row].points);
+  }
+}
+
+
+let highestOccurrence = function(standings, target) {
+  let i = 0;
+  for (i=0; i<standings.length; i++) {
+    if (standings[i].points <= target) {
+      break;
+    }
+  }
+  return i+1;
+};
+
+
+let scheduledGamesCount = function(grid) {
+  let unplayed = 0;
+  for (let homeRow=0; homeRow<CLUBS_IN_LEAGUE; homeRow++) {
+    for (let awayColumn=0; awayColumn<CLUBS_IN_LEAGUE; awayColumn++) {
+      if (grid[homeRow][awayColumn] == null) {   // also matches undefined
+        unplayed++;
+      }
+    }
+  }
+  return unplayed;
+};
 
 
 //=================================================
@@ -352,21 +410,13 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
     }
     leagueClubIndex.sort(function(a,b) { return (parseInt(a) - parseInt(b)) });    // numeric sort
     constructTheCompressedGrid();     // id order
-
-    leagueStandings = calculateStandings(compressedGrid);
+    
+    leagueStandings = calculateStandings(compressedGrid, true);   // consider goal difference etc.
 
     // let's see it in the console
-    console.log("\nleagueStandings after sort");
-    let dummyTable1 = JSON.parse(JSON.stringify(leagueStandings));
-    console.log(dummyTable1);
-
-    // now show it
-    populateTheChart();
-
-    // prepare for simulations
-    constructTheCompressedGrid();
-    //console.log(leagueClubs);
-    //console.log(compressedGrid);
+    //console.log("\nleagueStandings after sort");
+    //let dummyTable1 = JSON.parse(JSON.stringify(leagueStandings));
+    //console.log(dummyTable1);
 
     // min, max points are easy...
     for (let someClubId in leagueClubs) {
@@ -375,76 +425,13 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       someClub.potentialPointsBest  = someClub.points + (POINTS_PER_WIN*(MATCHES_PER_CLUB-someClub.played));
     }
 
-    // redisplay with new info
-    populateTheChart();
-
-    // now simulate for worst position
-    //console.log("\ncompressedGrid:");
-    //console.log(compressedGrid);
-    //printGrid(compressedGrid);
-
-    // 2. for each club...
-    for (let clubUnderTest=3;clubUnderTest===3;clubUnderTest++) {
-    //for (let clubUnderTest=0;clubUnderTest<compressedGrid.length;clubUnderTest++) {
-      let perfectGrid = deepCopyGrid(compressedGrid);
-      //let homeGames = perfectGrid[clubUnderTest];
-      //let awayGames = perfectGrid.map( x => x[clubUnderTest]);
-      let inYourDreams = 0;
-
-      // set remainder of season to perfect
-      for (let opponent=0; opponent<CLUBS_IN_LEAGUE; opponent++) {   // -1 because don't look at the [id, points] entry
-        
-
-        //if (homeGames[opponent] == null) {                          // home game not played yet...
-        //  homeGames[opponent] = [POINTS_PER_WIN, POINTS_PER_LOSS];  // claim future home win
-        
-        if (perfectGrid[clubUnderTest][opponent] == null) {                           // home game not played yet...
-          perfectGrid[clubUnderTest][opponent] = [POINTS_PER_WIN, POINTS_PER_LOSS];   // claim future home win
+    populateTheChart();   // now show it
+    console.log(scheduledGamesCount(compressedGrid)+" ganes remain to be played this season");
 
 
-        }
-
-
-        //if (awayGames[opponent] == null) {                          // away game not played yet...
-        //  awayGames[opponent] = [POINTS_PER_LOSS, POINTS_PER_WIN];  // claim future away win
-        
-        if (perfectGrid[opponent][clubUnderTest] == null) {                         // away game not played yet...
-          perfectGrid[opponent][clubUnderTest] = [POINTS_PER_LOSS, POINTS_PER_WIN]; // claim future away win
-
-
-        }
-        //inYourDreams += homeGames[opponent][US];
-        //inYourDreams += awayGames[opponent][THEM];
-        inYourDreams += perfectGrid[clubUnderTest][opponent][US];
-        inYourDreams += perfectGrid[opponent][clubUnderTest][THEM];
-      }
-      //perfectGrid[clubUnderTest][CLUBS_IN_LEAGUE][POINTS] = inYourDreams;
-      //calculateGridPoints(perfectGrid);
-
-      //let thisClubName = leagueClubs[compressedGrid[clubUnderTest][CLUBS_IN_LEAGUE][ID]].name;
-      let thisClubName = leagueClubs[leagueClubIndex[clubUnderTest]].name;
-      console.log("\nrow "+clubUnderTest+"  "+thisClubName+" could finish with "+inYourDreams+" points this season");
-      console.log("\nperfectGrid unsorted:");
-      let dummyTable3 = JSON.parse(JSON.stringify(perfectGrid));
-      console.log(dummyTable3);
-      //printGrid(dummyTable3);
-
-
-
-      //perfectGrid = perfectGrid.sort(compareFunction_sortGridByPoints);
-
-      // OH MY GOD need to juggle COLUMNS if we move rows around!!!
-      // maybe I should stick with a sparse grid?
-      
-      console.log("\nperfectGrid after sort by points (ignoring GD):");
-      let dummyTable4 = JSON.parse(JSON.stringify(perfectGrid));
-      console.log(dummyTable4);
-
-      //for (let i=0; i<perfectGrid.length; i++) {
-      //  let thisClubName   = leagueClubs[perfectGrid[i][CLUBS_IN_LEAGUE][ID]].name;
-      //  let thisClubPoints = [perfectGrid[i][CLUBS_IN_LEAGUE][POINTS]];
-      //  console.log((i+1)+" "+thisClubName+" "+thisClubPoints);
-      //}
+    //=================================================================
+    // begin simulation
+    //=================================================================
 
       // heuristic: try to get this club to #1
       // 0.  give this club all wins
@@ -459,100 +446,84 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       // work down the table. give wins to each row just enough to keep it behind our club, then losses
 
 
-      // how to handle GD? only matters if we are first-equal.
+    console.log("\n1. find highest finish positions.")
+    // for each club...
 
-      printGrid(perfectGrid);
+
+    // test data set featuring Leicester
+    let leicester = 11;
+    let leicesterGrid = deepCopyGrid(compressedGrid);
+    for (let opponent=0; opponent<(CLUBS_IN_LEAGUE-3); opponent++) {   
+      if (leicesterGrid[leicester][opponent] == null) {                           // home game not played yet...
+        leicesterGrid[leicester][opponent] = [POINTS_PER_WIN, POINTS_PER_LOSS];   // claim future home win
+      }
+      if (leicesterGrid[opponent][leicester] == null) {                         // away game not played yet...
+        leicesterGrid[opponent][leicester] = [POINTS_PER_LOSS, POINTS_PER_WIN]; // claim future away win
+      }
     }
+    printGrid(leicesterGrid);
 
-    // brute force exhaustive. THis will never finish.
 
 
-    // redisplay with new info
-    populateTheChart();
+    //===============================================
+    // invoke test environment
+    //===============================================
+
+    compressedGrid = deepCopyGrid(leicesterGrid);    // run algorithms with Nearly-Best Leicester Ever
+    console.log("Reality = Leicester Dream less 3 wins");
+
+    //===============================================
+    //
+    //===============================================
+
+
+
+    //for (let clubUnderTest=18;clubUnderTest===18;clubUnderTest++) {   // Cardiff City
+    for (let clubUnderTest=0;clubUnderTest<compressedGrid.length;clubUnderTest++) {
+      let perfectGrid = deepCopyGrid(compressedGrid);
+      
+      // set remainder of season to perfect
+      let inYourDreams = 0;
+      for (let opponent=0; opponent<CLUBS_IN_LEAGUE; opponent++) {   
+        if (perfectGrid[clubUnderTest][opponent] == null) {                           // home game not played yet...
+          perfectGrid[clubUnderTest][opponent] = [POINTS_PER_WIN, POINTS_PER_LOSS];   // claim future home win
+        }
+        if (perfectGrid[opponent][clubUnderTest] == null) {                         // away game not played yet...
+          perfectGrid[opponent][clubUnderTest] = [POINTS_PER_LOSS, POINTS_PER_WIN]; // claim future away win
+        }
+        inYourDreams += perfectGrid[clubUnderTest][opponent][US];
+        inYourDreams += perfectGrid[opponent][clubUnderTest][THEM];
+      }
+      let perfectStandings = calculateStandings(perfectGrid, false);    // ignoring goal difference
+      //printStandings(perfectStandings);
+
+
+      let thisClubName = leagueClubs[leagueClubIndex[clubUnderTest]].name;
+      //console.log("\nrow "+clubUnderTest+"  "+thisClubName+" could finish with "+inYourDreams+" points this season");
+      //printGrid(perfectGrid);
+
+      // 1a. try giving all other games a draw.
+      //make a working copy of the grid.
+      let workingGrid = deepCopyGrid(perfectGrid);
+      for (let homeRow=0; homeRow<CLUBS_IN_LEAGUE; homeRow++) {
+        for (let awayColumn=0; awayColumn<CLUBS_IN_LEAGUE; awayColumn++) {
+          if (workingGrid[homeRow][awayColumn] == null) {   // also matches undefined
+            workingGrid[homeRow][awayColumn] = [POINTS_PER_DRAW, POINTS_PER_DRAW];
+          }
+        }
+      }
+      //printGrid(workingGrid);
+      let workingStandings = calculateStandings(workingGrid, false);    // ignore goal difference
+      //printStandings(workingStandings);
+      let bestFinish = highestOccurrence(workingStandings, inYourDreams);
+      console.log(bestFinish+"  "+thisClubName+" (all draws) with "+inYourDreams+" points");
+
+      // 1b. work down the table awarding just enough wins
+      workingGrid = deepCopyGrid(perfectGrid);
+      // start with all clubs below ours.
+      // working up that list, add wins until <= our club's points (then fill in with losses)
+    }
 
 
   });
 });
-
-//let maxNameLength = 0;
-
-
-
-let printGrid = function(grid) {
-  let row0 = grid[0];
-  //let rowIdElement = row0.length-1;
-  //let clubId0 = row0[rowIdElement][ID];
-  let clubId0 = leagueClubIndex[0];
-  let paddedLength = leagueClubs[clubId0].paddedName.length;
-  
-  let leftString = new Array(paddedLength+1).join(" ");
-
-  for (let v=0; v<paddedLength; v++) {
-    let newString = leftString;
-    for (let row=0; row<grid.length; row++) {
-      //let clubId = grid[row][rowIdElement][ID];
-      let clubId = leagueClubIndex[row];
-      newString = newString+"  "+leagueClubs[clubId].paddedName[v];
-    }
-    console.log(newString);
-  }
-
-  for (let row=0;row<grid.length;row++) {
-    let currentRow = grid[row];
-    //let clubId = currentRow[currentRow.length-1][ID];
-    let clubId = leagueClubIndex[row];
-    //console.log(leagueClubs[clubId].name);
-
-    // now display points or '.' for self-self
-    let currentResults = grid[row];
-    let resultsCount = currentResults.length;//-1;    
-    let homeResultsString = leagueClubs[clubId].paddedName;
-    let awayResultsString = leftString+" ";
-    for (let result=0; result<resultsCount; result++) {
-      if (currentResults[result] == null) {
-        homeResultsString = homeResultsString+"  "+"-";
-        awayResultsString = awayResultsString+"  "+"-";
-      } else {
-        homeResultsString = homeResultsString+"  "+currentResults[result][US];
-        awayResultsString = awayResultsString+"  "+currentResults[result][THEM];
-      }
-    }
-    console.log(homeResultsString,"\n");
-    console.log(awayResultsString,"\n");
-  }
-};
-
-
-// time to refactor and redesign the data structures
-
-// 1. Gather and Display current standings
-
-// keep leagueClubs[ ] - source of baseline truth including points
-//   - in clubId order
-
-// construct leagueStandings from leagueClubs
-//  - just a point-ordered list of clubIds
-//  - no other data
-
-// populate hhtml table from leagueClubs[ ] following leagueStandings order
-
-
-// 2. Simulation
-
-// construct compressedGrid[ ][ ]
-//  - in clubId order
-
-// foreach club -
-  // deepcopy compressedGrid to PerfectGrid
-  // award all remaining matches for club under test
-  // calculate points -> perfectStandings[ ] w/ comparefunction
-
-  // for each simulation heuristic
-    // deepcopy perfectGrid to workingGrid
-    // hack other club scores using perfectStandings data as guide
-    // calculate points -> workingStandings
-    // checktable for completeness
-    // record club final standing
-      // stop if 1st place is achieved
-
-
