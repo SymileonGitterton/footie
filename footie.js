@@ -1,6 +1,8 @@
 'use strict';
 
 const CREST_HEIGHT = 30;
+const DOT_HEIGHT = 50;
+const DOT_COUNT = 10;
 const US = 0;
 const THEM = 1;
 const ID = US;
@@ -52,7 +54,44 @@ let footballHeaders = new Headers();
 footballHeaders.append("X-Auth-Token", "102c4a1fda584443861d8e3f4fe4096e");
 
 
+let createDots = function() {
+  for (let dot=0; dot<DOT_COUNT; dot++) {
+    let newDotNode = document.createElement("img");
+    newDotNode.src = "whiteDot.png";
+    newDotNode.height = DOT_HEIGHT;
+    newDotNode.id = "dot"+dot;
+    document.getElementById("dots").appendChild(newDotNode);
+  }
+  //console.log("dots innerHTML = "+document.getElementById("dots").innerHTML);//newDotNode.innerHTML);
+}
+
+
+let populateDots = function(n) {
+  //let whiteDotNode = document.createElement("img");
+  //whiteDotNode.src = "whiteDot.png";
+  //whiteDotNode.height = DOT_HEIGHT;
+  //let greenDotNode = document.createElement("img");
+  //greenDotNode.src = "greenDot.png";
+  //greenDotNode.height = DOT_HEIGHT;
+  let dotCounter = 0;
+  if (n >= DOT_COUNT) {
+    n = DOT_COUNT-1;
+  }
+  for (dotCounter=0; dotCounter<n; dotCounter++){
+    let dotId = "dot"+dotCounter;
+    let targetDotNode = document.getElementById(dotId);
+    targetDotNode.src = "greenDot.png";
+  }
+  for ( ; dotCounter<DOT_COUNT; dotCounter++){
+    let dotId = "dot"+dotCounter;
+    let targetDotNode = document.getElementById(dotId);
+    targetDotNode.src = "whiteDot.png";
+  }
+}
+
+
 let constructTheCompressedGrid = function() {
+  let newGrid = [];
   for (let homeRow=0; homeRow<CLUBS_IN_LEAGUE; homeRow++) {
     let newGridRow = [];
     for (let awayColumn=0;awayColumn<CLUBS_IN_LEAGUE;awayColumn++) {
@@ -62,10 +101,9 @@ let constructTheCompressedGrid = function() {
         newGridRow[awayColumn] = leagueClubs[leagueClubIndex[homeRow]].results[leagueClubIndex[awayColumn]]; 
       }
     }
-    compressedGrid[homeRow] = newGridRow;
-    //let dummyCG = JSON.parse(JSON.stringify(compressedGrid));
-    //console.log(dummyCG);
+    newGrid[homeRow] = newGridRow;
   }
+    return newGrid;
 };
 
 
@@ -313,6 +351,9 @@ let scheduledGamesCount = function(grid) {
 //=================================================
 
 constructTheChart();    // basic html table setup
+createDots();
+populateDots(0);
+
 
 // construct dictionary object of club objects
 // and build the 20x20x2 match grid
@@ -322,9 +363,12 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
         headers: footballHeaders,
   })
   .then(function(response) {
+    populateDots(1);
     return response.json();
   })
   .then(function(incomingObjectTeams) {
+    populateDots(2);
+
     for (let team=0; team<incomingObjectTeams.teams.length;team++) {
       let thisClubId = incomingObjectTeams.teams[team]["id"];
       let thisClubResults = [];
@@ -351,8 +395,14 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       leagueClubIndex.push(thisClubId);         // make list of club ids. to be sorted later
     }
     generatePaddedNames();
+    compressedGrid = constructTheCompressedGrid();
+    leagueStandings = calculateStandings(compressedGrid, false);
+    populateTheChart();    // basic html table setup
+
   })
   .then(function() {
+    populateDots(3);
+
     // now collect the match data
     fetch('https://api.football-data.org/v2/competitions/PL/matches', {
         method: "GET",
@@ -360,9 +410,12 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
         headers: footballHeaders,
     })
   .then(function(response) {
+    populateDots(4);
     return response.json();
   })
   .then(function(incomingObjectMatches) {
+    populateDots(5);
+
     // calculate goals and points per club by parsing all match records
     for (let i=0; i<incomingObjectMatches.matches.length; i++) {
       let thisMatch = incomingObjectMatches.matches[i];
@@ -409,7 +462,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       }
     }
     leagueClubIndex.sort(function(a,b) { return (parseInt(a) - parseInt(b)) });    // numeric sort
-    constructTheCompressedGrid();     // id order
+    compressedGrid = constructTheCompressedGrid();     // id order
     
     leagueStandings = calculateStandings(compressedGrid, true);   // consider goal difference etc.
 
@@ -425,8 +478,10 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       someClub.potentialPointsBest  = someClub.points + (POINTS_PER_WIN*(MATCHES_PER_CLUB-someClub.played));
     }
 
+    populateDots(6);
     populateTheChart();   // now show it
-    console.log(scheduledGamesCount(compressedGrid)+" ganes remain to be played this season");
+    console.log(scheduledGamesCount(compressedGrid)+" games remain to be played this season");
+    populateDots(7);
 
 
     //=================================================================
@@ -523,6 +578,8 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       // start with all clubs below ours.
       // working up that list, add wins until <= our club's points (then fill in with losses)
     }
+    
+    populateDots(8);
 
 
   });
