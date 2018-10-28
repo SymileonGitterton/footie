@@ -1,8 +1,6 @@
 'use strict';
 
 const CREST_HEIGHT = 30;
-const DOT_HEIGHT = 50;
-const DOT_COUNT = 10;
 const US = 0;
 const THEM = 1;
 const ID = US;
@@ -36,16 +34,21 @@ const tableHeaderNames = [{"colname":" ",       "colvalue":"position"},
                           {"colname":"worst",   "colvalue":"potentialFinishWorst"} 
                           ];
 
+const DOT_HEIGHT = 50;
+const DOT_COUNT = 10;
+const MINOR_DOT_COUNT = CLUBS_IN_LEAGUE;
+const MINOR_DOT_HEIGHT = Math.floor(DOT_HEIGHT*(DOT_COUNT/MINOR_DOT_COUNT));
+
 // global objects
 let leagueClubs = [];     // sparse array indexed by clubId
 let leagueClubIndex = []; // compressed directory of ids
 let leagueStandings = []; // {id, points, position} sorted into postional order (position might not be unique)
-let compressedGrid = [];  // always in clubId order
+let leagueGrid = [];      // always in clubId order
 
-// compressedGrid structure:
+// compressed leagueGrid structure:
 //
 // 20 rows of home team
-//   each row has 21 entries (19 opponents, self, [id,points] )
+//   each row has 20 entries (19 opponents, self)
 //      each entry is a two-element array [homeTeamPoints, awaayTeamPoints] aka [US, THEM]
 
 
@@ -62,17 +65,9 @@ let createDots = function() {
     newDotNode.id = "dot"+dot;
     document.getElementById("dots").appendChild(newDotNode);
   }
-  //console.log("dots innerHTML = "+document.getElementById("dots").innerHTML);//newDotNode.innerHTML);
 }
 
-
 let populateDots = function(n) {
-  //let whiteDotNode = document.createElement("img");
-  //whiteDotNode.src = "whiteDot.png";
-  //whiteDotNode.height = DOT_HEIGHT;
-  //let greenDotNode = document.createElement("img");
-  //greenDotNode.src = "greenDot.png";
-  //greenDotNode.height = DOT_HEIGHT;
   let dotCounter = 0;
   if (n >= DOT_COUNT) {
     n = DOT_COUNT-1;
@@ -84,6 +79,35 @@ let populateDots = function(n) {
   }
   for ( ; dotCounter<DOT_COUNT; dotCounter++){
     let dotId = "dot"+dotCounter;
+    let targetDotNode = document.getElementById(dotId);
+    targetDotNode.src = "whiteDot.png";
+  }
+  populateMinorDots(0);
+}
+
+let createMinorDots = function() {
+  for (let dot=0; dot<MINOR_DOT_COUNT; dot++) {
+    let newDotNode = document.createElement("img");
+    newDotNode.src = "whihteDot.png";
+    newDotNode.height = MINOR_DOT_HEIGHT;
+    newDotNode.id = "minordot"+dot;
+    document.getElementById("minordots").appendChild(newDotNode);
+  }
+}
+
+
+let populateMinorDots = function(n) {
+  let dotCounter = 0;
+  if (n >= MINOR_DOT_COUNT) {
+    n = MINOR_DOT_COUNT-1;
+  }
+  for (dotCounter=0; dotCounter<n; dotCounter++){
+    let dotId = "minordot"+dotCounter;
+    let targetDotNode = document.getElementById(dotId);
+    targetDotNode.src = "blueDot.png";
+  }
+  for ( ; dotCounter<MINOR_DOT_COUNT; dotCounter++){
+    let dotId = "minordot"+dotCounter;
     let targetDotNode = document.getElementById(dotId);
     targetDotNode.src = "whiteDot.png";
   }
@@ -243,17 +267,23 @@ let calculateStandings = function(grid, useTieBreakers) {
   // from a grid of results, work out points per club... 
   for (let row=0; row<CLUBS_IN_LEAGUE; row++) {
     let clubPoints = 0;
+    let matchesPlayed = 0;
     for (let column=0; column<CLUBS_IN_LEAGUE; column++) {
-      if (grid[row][column] != null) {          // (== null) comparision matches undefined
-        clubPoints += grid[row][column][US];    // add home game points
-      }
-      if (grid[column][row] != null) {          // (== null) comparision matches undefined
-        clubPoints += grid[column][row][THEM];  // add away game points
+      if (row !== column) {
+        if (grid[row][column] != null) {          // (== null) comparision matches undefined
+          clubPoints += grid[row][column][US];    // add home game points
+          matchesPlayed++;
+        }
+        if (grid[column][row] != null) {          // (== null) comparision matches undefined
+          clubPoints += grid[column][row][THEM];  // add away game points
+          matchesPlayed++;
+        }
       }
     }
     newStandings[row] = {"clubId":   leagueClubIndex[row],
                          "position": -1,
-                         "points":   clubPoints};
+                         "points":   clubPoints,
+                         "matchesPlayed": matchesPlayed};
   }
 
   if (useTieBreakers) {
@@ -329,7 +359,7 @@ let highestOccurrence = function(standings, target) {
       break;
     }
   }
-  return i+1;
+  return i;
 };
 
 
@@ -351,6 +381,7 @@ let scheduledGamesCount = function(grid) {
 //=================================================
 
 constructTheChart();    // basic html table setup
+createMinorDots();
 createDots();
 populateDots(0);
 
@@ -370,6 +401,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
     populateDots(2);
 
     for (let team=0; team<incomingObjectTeams.teams.length;team++) {
+      populateMinorDots(team+1);
       let thisClubId = incomingObjectTeams.teams[team]["id"];
       let thisClubResults = [];
 
@@ -395,10 +427,9 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       leagueClubIndex.push(thisClubId);         // make list of club ids. to be sorted later
     }
     generatePaddedNames();
-    compressedGrid = constructTheCompressedGrid();
-    leagueStandings = calculateStandings(compressedGrid, false);
+    leagueGrid = constructTheCompressedGrid();
+    leagueStandings = calculateStandings(leagueGrid, false);    // although there is no match data yet...
     populateTheChart();    // basic html table setup
-
   })
   .then(function() {
     populateDots(3);
@@ -462,14 +493,8 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       }
     }
     leagueClubIndex.sort(function(a,b) { return (parseInt(a) - parseInt(b)) });    // numeric sort
-    compressedGrid = constructTheCompressedGrid();     // id order
-    
-    leagueStandings = calculateStandings(compressedGrid, true);   // consider goal difference etc.
-
-    // let's see it in the console
-    //console.log("\nleagueStandings after sort");
-    //let dummyTable1 = JSON.parse(JSON.stringify(leagueStandings));
-    //console.log(dummyTable1);
+    leagueGrid = constructTheCompressedGrid();     // id order
+    leagueStandings = calculateStandings(leagueGrid, true);   // consider goal difference etc.
 
     // min, max points are easy...
     for (let someClubId in leagueClubs) {
@@ -480,7 +505,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 
     populateDots(6);
     populateTheChart();   // now show it
-    console.log(scheduledGamesCount(compressedGrid)+" games remain to be played this season");
+    console.log(scheduledGamesCount(leagueGrid)+" games remain to be played this season");
     populateDots(7);
 
 
@@ -502,12 +527,14 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
 
 
     console.log("\n1. find highest finish positions.")
+    let bestJeanist = [];
+    let worstJeanist = [];
     // for each club...
 
 
-    // test data set featuring Leicester
+    // test data set featuring Leicester City
     let leicester = 11;
-    let leicesterGrid = deepCopyGrid(compressedGrid);
+    let leicesterGrid = deepCopyGrid(leagueGrid);
     for (let opponent=0; opponent<(CLUBS_IN_LEAGUE-3); opponent++) {   
       if (leicesterGrid[leicester][opponent] == null) {                           // home game not played yet...
         leicesterGrid[leicester][opponent] = [POINTS_PER_WIN, POINTS_PER_LOSS];   // claim future home win
@@ -516,26 +543,27 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
         leicesterGrid[opponent][leicester] = [POINTS_PER_LOSS, POINTS_PER_WIN]; // claim future away win
       }
     }
-    printGrid(leicesterGrid);
-
 
 
     //===============================================
     // invoke test environment
     //===============================================
 
-    compressedGrid = deepCopyGrid(leicesterGrid);    // run algorithms with Nearly-Best Leicester Ever
-    console.log("Reality = Leicester Dream less 3 wins");
+    leagueGrid = deepCopyGrid(leicesterGrid);    // run algorithms with Nearly-Best Leicester Ever
+    leagueStandings = calculateStandings(leagueGrid, true);   // consider goal difference etc.
+    console.log("Reality = Leicester Dream, less 3 wins");
 
     //===============================================
     //
     //===============================================
 
 
-
-    //for (let clubUnderTest=18;clubUnderTest===18;clubUnderTest++) {   // Cardiff City
-    for (let clubUnderTest=0;clubUnderTest<compressedGrid.length;clubUnderTest++) {
-      let perfectGrid = deepCopyGrid(compressedGrid);
+    let testIndex = leagueClubIndex.indexOf(leagueStandings[14].clubId);
+    console.log("club "+testIndex+" "+leagueClubs[leagueClubIndex[testIndex]].name+" has been selected");
+    for (let clubUnderTest=testIndex;clubUnderTest===testIndex;clubUnderTest++) {
+    //or (let clubUnderTest=0;clubUnderTest<CLUBS_IN_LEAGUE;clubUnderTest++) {
+      populateMinorDots(clubUnderTest);
+      let perfectGrid = deepCopyGrid(leagueGrid);
       
       // set remainder of season to perfect
       let inYourDreams = 0;
@@ -550,37 +578,107 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
         inYourDreams += perfectGrid[opponent][clubUnderTest][THEM];
       }
       let perfectStandings = calculateStandings(perfectGrid, false);    // ignoring goal difference
-      //printStandings(perfectStandings);
 
-
-      let thisClubName = leagueClubs[leagueClubIndex[clubUnderTest]].name;
-      //console.log("\nrow "+clubUnderTest+"  "+thisClubName+" could finish with "+inYourDreams+" points this season");
-      //printGrid(perfectGrid);
 
       // 1a. try giving all other games a draw.
       //make a working copy of the grid.
-      let workingGrid = deepCopyGrid(perfectGrid);
+      let othersAllDrawGrid = deepCopyGrid(perfectGrid);
       for (let homeRow=0; homeRow<CLUBS_IN_LEAGUE; homeRow++) {
         for (let awayColumn=0; awayColumn<CLUBS_IN_LEAGUE; awayColumn++) {
-          if (workingGrid[homeRow][awayColumn] == null) {   // also matches undefined
-            workingGrid[homeRow][awayColumn] = [POINTS_PER_DRAW, POINTS_PER_DRAW];
+          if (othersAllDrawGrid[homeRow][awayColumn] == null) {   // also matches undefined
+            othersAllDrawGrid[homeRow][awayColumn] = [POINTS_PER_DRAW, POINTS_PER_DRAW];
           }
         }
       }
-      //printGrid(workingGrid);
-      let workingStandings = calculateStandings(workingGrid, false);    // ignore goal difference
-      //printStandings(workingStandings);
-      let bestFinish = highestOccurrence(workingStandings, inYourDreams);
-      console.log(bestFinish+"  "+thisClubName+" (all draws) with "+inYourDreams+" points");
+      let othersAllDrawStandings = calculateStandings(othersAllDrawGrid, false);    // ignore goal difference
+      let bestFinishIndex = highestOccurrence(othersAllDrawStandings, inYourDreams);
+      let bestFinish = bestFinishIndex+1;
+      let thisClubId = leagueClubIndex[clubUnderTest];
+      let thisClubName = leagueClubs[thisClubId].name;
+      console.log(bestFinish+"  ["+thisClubId+"] "+thisClubName+" (all draws) with "+inYourDreams+" points");
+      bestJeanist[clubUnderTest] = bestFinish;
 
-      // 1b. work down the table awarding just enough wins
-      workingGrid = deepCopyGrid(perfectGrid);
-      // start with all clubs below ours.
-      // working up that list, add wins until <= our club's points (then fill in with losses)
-    }
-    
+
+      // 1b. try to move the clubs above ours down by changing some draws to losses
+      // award corresponding wins to lowest-ranked opponents
+      if (bestFinishIndex > 0) {
+        let mungingGrid = deepCopyGrid(perfectGrid);  // fresh copy, our club best, unplayed matches undefined
+        let mungingStandings = calculateStandings(mungingGrid, false);
+
+        for (let aheadClubIndexInAllDraws=0; aheadClubIndexInAllDraws<bestFinishIndex;aheadClubIndexInAllDraws++) {
+          let aheadClubId = othersAllDrawStandings[aheadClubIndexInAllDraws].clubId;
+          let deficit = othersAllDrawStandings[aheadClubIndexInAllDraws].points - inYourDreams;
+          console.log("  club "+aheadClubId+" ("+leagueClubs[aheadClubId].name+") is "+deficit+" ahead of us");
+
+
+          // perfectGrid/standings has all wins for us, unplayed matches are undefined
+          // workingGrid/standings has draws assigned to unplayed matches
+          // grids are always in compressed id order (all the same order)
+          // standings are always in points order (NOT all the same order)
+
+          let aheadClubIndexInPerfect = -1;
+          perfectStandings.forEach(function(item,index) {
+            if (item.clubId === aheadClubId) {
+              aheadClubIndexInPerfect = index;
+            }
+          });
+          let aheadClubMatchesYetToPlay = MATCHES_PER_CLUB - perfectStandings[aheadClubIndexInPerfect].matchesPlayed;
+          console.log("     need to assign "+deficit+" games out of "+aheadClubMatchesYetToPlay+" remaining to play");
+
+          if (1) {
+            console.log("\nleagueGrid");
+            printGrid(leagueGrid);
+            console.log("\nleagueStandings");
+            console.log(leagueStandings);
+            console.log("\n\n");
+            console.log("\nperfectGrid");
+            printGrid(perfectGrid);
+            console.log("\nperfectStandings");
+            console.log(perfectStandings);
+            console.log("\n\n");
+            console.log("\nothersAllDrawGrid");
+            printGrid(othersAllDrawGrid);
+            console.log("\nothersAllDrawStandings");
+            console.log(othersAllDrawStandings);
+          }
+
+          // for this club that's ahead -
+          // calculate game count to flip (1 -> 0)
+
+          //for ()
+
+        }
+        
+      }
+
+      // 1c. work down the table awarding just enough wins
+      // ... if we didn't already get to 1st
+
+      // perfectStandings contains the positional info for clubs based on current matchday standings
+      // with our club given all yet-to-play wins
+      //workingGrid = deepCopyGrid(perfectGrid);  // fresh copy, our club best, unplayed matches undefined
+      //workingStandings = calculateStandings(workingGrid, false);
+
+      if (bestFinish !== 1) {
+        // starting with lowest clubs below ours, 
+        // distribute wins until <= our club's points (then fill in with losses)
+        // assign wins starting with highest-ranked opponets first (both home and away)
+
+      }
+
+    } // end of per-club consideration
+
     populateDots(8);
 
+    // copy positional results into main data structure
+    for (let clubUnderTest=0;clubUnderTest<CLUBS_IN_LEAGUE;clubUnderTest++) {
+      leagueClubs[leagueClubIndex[clubUnderTest]].potentialFinishBest = bestJeanist[clubUnderTest];
+    }
 
+    populateTheChart();   // now show it
+    populateDots(9);
+    //console.log("\nleagueStandings\n",leagueStandings);
+    //console.log("\nleagueClubIndex\n",leagueClubIndex);
+    //console.log("\nleagueClubs\n",leagueClubs);
   });
 });
