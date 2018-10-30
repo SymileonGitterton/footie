@@ -1,5 +1,13 @@
 'use strict';
 
+const LEICESTER_TESTER = true;
+const SINGLES_CLUB = false;
+const TABLE_DUMP = false;
+const TEST_LEEWAY = 4;
+
+const CLUB_ID_BURNLEY = 328;
+const CLUB_ID_LEICESTER = 338;
+
 const CREST_HEIGHT = 30;
 const US = 0;
 const THEM = 1;
@@ -376,6 +384,30 @@ let scheduledGamesCount = function(grid) {
 };
 
 
+let floodWithDraws = function(grid) {
+  for (let homeRow=0; homeRow<CLUBS_IN_LEAGUE; homeRow++) {
+    for (let awayColumn=0; awayColumn<CLUBS_IN_LEAGUE; awayColumn++) {
+      if (grid[homeRow][awayColumn] == null) {   // also matches undefined
+        grid[homeRow][awayColumn] = [POINTS_PER_DRAW, POINTS_PER_DRAW];
+      }
+    }
+  }
+};
+
+
+
+let reverseLookupStandings = function(standings, matchId) {
+  // reverse lookup aheadClub in PerfectGrid
+  let aheadClubIndex = -1;
+  standings.forEach(function(item,index) {
+    if (item.clubId === matchId) {
+      aheadClubIndex = index;
+    }
+  });
+  return aheadClubIndex;
+};
+
+
 //=================================================
 // begin execution here
 //=================================================
@@ -532,36 +564,58 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
     // for each club...
 
 
-    // test data set featuring Leicester City
-    let leicester = 11;
-    let leicesterGrid = deepCopyGrid(leagueGrid);
-    for (let opponent=0; opponent<(CLUBS_IN_LEAGUE-3); opponent++) {   
-      if (leicesterGrid[leicester][opponent] == null) {                           // home game not played yet...
-        leicesterGrid[leicester][opponent] = [POINTS_PER_WIN, POINTS_PER_LOSS];   // claim future home win
-      }
-      if (leicesterGrid[opponent][leicester] == null) {                         // away game not played yet...
-        leicesterGrid[opponent][leicester] = [POINTS_PER_LOSS, POINTS_PER_WIN]; // claim future away win
-      }
-    }
-
 
     //===============================================
     // invoke test environment
     //===============================================
+    if (LEICESTER_TESTER) {
 
-    leagueGrid = deepCopyGrid(leicesterGrid);    // run algorithms with Nearly-Best Leicester Ever
-    leagueStandings = calculateStandings(leagueGrid, true);   // consider goal difference etc.
-    console.log("Reality = Leicester Dream, less 3 wins");
+      // test data set featuring Leicester City
+      let leicesterGridIndex = leagueClubIndex.indexOf(CLUB_ID_LEICESTER);
+      let leicesterGrid = deepCopyGrid(leagueGrid);
 
+      let matchesPlayedByLeicester = leagueClubs[CLUB_ID_LEICESTER].played;
+      let matchesPlayedTarget = MATCHES_PER_CLUB-TEST_LEEWAY;
+      console.log("club "+CLUB_ID_LEICESTER+" which should be "+leagueClubs[CLUB_ID_LEICESTER].name+" have played "+matchesPlayedByLeicester+" games in reality");
+
+      for (let opponent=0; opponent<CLUBS_IN_LEAGUE; opponent++) {   
+        if (leicesterGrid[leicesterGridIndex][opponent] == null) {                           // home game not played yet...
+          leicesterGrid[leicesterGridIndex][opponent] = [POINTS_PER_WIN, POINTS_PER_LOSS];   // claim future home win
+          if (++matchesPlayedByLeicester >= matchesPlayedTarget) {
+            break;
+          }
+        }
+        if (leicesterGrid[opponent][leicesterGridIndex] == null) {                         // away game not played yet...
+          leicesterGrid[opponent][leicesterGridIndex] = [POINTS_PER_LOSS, POINTS_PER_WIN]; // claim future away win        
+          if (++matchesPlayedByLeicester >= matchesPlayedTarget) {
+            break;
+          }
+        }
+      }
+      console.log("now we think they have played "+matchesPlayedByLeicester+" games. In fantasy.\n");
+
+      leagueGrid = deepCopyGrid(leicesterGrid);    // run algorithms with Nearly-Best Leicester Ever
+      leagueStandings = calculateStandings(leagueGrid, true);   // consider goal difference etc.
+      console.log("Reality Warp: Leicester Dream Future, less "+TEST_LEEWAY+" wins");
+    }
     //===============================================
-    //
-    //===============================================
 
 
-    let testIndex = leagueClubIndex.indexOf(leagueStandings[14].clubId);
-    console.log("club "+testIndex+" "+leagueClubs[leagueClubIndex[testIndex]].name+" has been selected");
-    for (let clubUnderTest=testIndex;clubUnderTest===testIndex;clubUnderTest++) {
-    //or (let clubUnderTest=0;clubUnderTest<CLUBS_IN_LEAGUE;clubUnderTest++) {
+
+    let clubRangeStart = 0;
+    let clubRangeLength = CLUBS_IN_LEAGUE;
+    if (SINGLES_CLUB) {
+      clubRangeStart = leagueClubIndex.indexOf(CLUB_ID_BURNLEY);
+      clubRangeLength = clubRangeStart+1;
+      //let testIndex = leagueClubIndex.indexOf(leagueStandings[14].clubId);
+      console.log("club "+CLUB_ID_BURNLEY+" (row "+clubRangeStart+") "+leagueClubs[leagueClubIndex[clubRangeStart]].name+" has been selected\n\n");
+      //for (let clubUnderTest=testIndex;clubUnderTest===testIndex;clubUnderTest++) {
+    }
+
+
+    //for (let clubUnderTest=0;clubUnderTest<CLUBS_IN_LEAGUE;clubUnderTest++) {
+    for (let clubUnderTest=clubRangeStart;clubUnderTest<clubRangeLength;clubUnderTest++) {
+    //if (0) {
       populateMinorDots(clubUnderTest);
       let perfectGrid = deepCopyGrid(leagueGrid);
       
@@ -580,72 +634,120 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       let perfectStandings = calculateStandings(perfectGrid, false);    // ignoring goal difference
 
 
+
       // 1a. try giving all other games a draw.
       //make a working copy of the grid.
       let othersAllDrawGrid = deepCopyGrid(perfectGrid);
-      for (let homeRow=0; homeRow<CLUBS_IN_LEAGUE; homeRow++) {
-        for (let awayColumn=0; awayColumn<CLUBS_IN_LEAGUE; awayColumn++) {
-          if (othersAllDrawGrid[homeRow][awayColumn] == null) {   // also matches undefined
-            othersAllDrawGrid[homeRow][awayColumn] = [POINTS_PER_DRAW, POINTS_PER_DRAW];
-          }
-        }
-      }
+      floodWithDraws(othersAllDrawGrid);
+
       let othersAllDrawStandings = calculateStandings(othersAllDrawGrid, false);    // ignore goal difference
-      let bestFinishIndex = highestOccurrence(othersAllDrawStandings, inYourDreams);
-      let bestFinish = bestFinishIndex+1;
+      let bestFinishAllDrawsIndex = highestOccurrence(othersAllDrawStandings, inYourDreams);
+      let bestFinishAllDraws = bestFinishAllDrawsIndex+1;
       let thisClubId = leagueClubIndex[clubUnderTest];
       let thisClubName = leagueClubs[thisClubId].name;
-      console.log(bestFinish+"  ["+thisClubId+"] "+thisClubName+" (all draws) with "+inYourDreams+" points");
-      bestJeanist[clubUnderTest] = bestFinish;
+      console.log(bestFinishAllDraws+"  ["+thisClubId+"] "+thisClubName+" (all draws) with "+inYourDreams+" points");
+      bestJeanist[clubUnderTest] = bestFinishAllDraws;
+
 
 
       // 1b. try to move the clubs above ours down by changing some draws to losses
       // award corresponding wins to lowest-ranked opponents
-      if (bestFinishIndex > 0) {
+      //if (bestFinishAllDrawsIndex > 0) {
+      //if (0) {
+      if (bestJeanist[clubUnderTest] > 0) {
         let mungingGrid = deepCopyGrid(perfectGrid);  // fresh copy, our club best, unplayed matches undefined
         let mungingStandings = calculateStandings(mungingGrid, false);
 
-        for (let aheadClubIndexInAllDraws=0; aheadClubIndexInAllDraws<bestFinishIndex;aheadClubIndexInAllDraws++) {
+        // target each club that's ahead of us, starting with top of the table
+        for (let aheadClubIndexInAllDraws=0; aheadClubIndexInAllDraws<bestFinishAllDrawsIndex;aheadClubIndexInAllDraws++) {
           let aheadClubId = othersAllDrawStandings[aheadClubIndexInAllDraws].clubId;
           let deficit = othersAllDrawStandings[aheadClubIndexInAllDraws].points - inYourDreams;
-          console.log("  club "+aheadClubId+" ("+leagueClubs[aheadClubId].name+") is "+deficit+" ahead of us");
+          let aheadClubIndexInPerfect = reverseLookupStandings(perfectStandings, aheadClubId);
+          let aheadClubMatchesYetToPlay = MATCHES_PER_CLUB - perfectStandings[aheadClubIndexInPerfect].matchesPlayed;
+          let aheadClubIndexInGrid = leagueClubIndex.indexOf(aheadClubId);
+
+          console.log("  club "+aheadClubId+" ("+leagueClubs[aheadClubId].name+") is "+deficit+" ahead of us with "+aheadClubMatchesYetToPlay+" left to play - drag them down:");
+          //console.log("   need to assign "+deficit+" games out of "+aheadClubMatchesYetToPlay+" remaining to play");
+
 
 
           // perfectGrid/standings has all wins for us, unplayed matches are undefined
           // workingGrid/standings has draws assigned to unplayed matches
+          // mungingGrid is a copy of working grid but some losses will b e given before filling with draws.
           // grids are always in compressed id order (all the same order)
           // standings are always in points order (NOT all the same order)
 
-          let aheadClubIndexInPerfect = -1;
-          perfectStandings.forEach(function(item,index) {
-            if (item.clubId === aheadClubId) {
-              aheadClubIndexInPerfect = index;
-            }
-          });
-          let aheadClubMatchesYetToPlay = MATCHES_PER_CLUB - perfectStandings[aheadClubIndexInPerfect].matchesPlayed;
-          console.log("     need to assign "+deficit+" games out of "+aheadClubMatchesYetToPlay+" remaining to play");
+          
+          let victimGamesFound = 0;
+          //while (victimGamesFound < deficit) {
+          //for (let lossCounter=0; lossCounter<deficit; lossCounter++) {
+            // find weakest opponent with unplayed game against aheadClub, and give it the win
+            // we're looking at mungingGrid (initially same as perfectGrid, not yet flooded)
 
-          if (1) {
+            // walk up standings from the bottom and see if they have played aheadClub, home and away
+            for (let laggingClub=CLUBS_IN_LEAGUE-1;laggingClub>=0;laggingClub--) {
+              let laggingClubId = mungingStandings[laggingClub].clubId;
+              let laggingClubIndexInGrid = leagueClubIndex.indexOf(laggingClubId);
+              let laggingClubAwayGame = mungingGrid[aheadClubIndexInGrid][laggingClubIndexInGrid];
+              let laggingClubHomeGame = mungingGrid[laggingClubIndexInGrid][aheadClubIndexInGrid];
+
+              if ((laggingClubHomeGame == undefined) || (laggingClubAwayGame == undefined)) {
+                console.log("   club "+laggingClubId+" ("+leagueClubs[laggingClubId].name+") is weak, #"+laggingClub+" in PerfectStandings[]");
+              }
+              if (laggingClubHomeGame == undefined) {
+                console.log("    giving #"+laggingClubId+" ("+leagueClubs[laggingClubId].name+") home win over #"+aheadClubId+" ("+leagueClubs[aheadClubId].name+")");
+                mungingGrid[laggingClubIndexInGrid][aheadClubIndexInGrid] = [POINTS_PER_WIN, POINTS_PER_LOSS];  // award home win to the lagger
+                victimGamesFound++;
+                if (victimGamesFound >= deficit) {
+                  break;
+                }
+              }
+              if (laggingClubAwayGame == undefined) {
+                console.log("    giving #"+laggingClubId+" ("+leagueClubs[laggingClubId].name+") away win at #"+aheadClubId+" ("+leagueClubs[aheadClubId].name+")");
+                mungingGrid[aheadClubIndexInGrid][laggingClubIndexInGrid] = [POINTS_PER_LOSS, POINTS_PER_WIN];  // award home loss to the aheadClub
+                victimGamesFound++;
+                if (victimGamesFound >= deficit) {
+                  break;
+                }
+              }
+            }
+          //}
+          console.log("   "+victimGamesFound+" victim games found to pull "+leagueClubs[aheadClubId].name+" down. we'll see if that's enough.\n\n");
+
+          mungingStandings = calculateStandings(mungingGrid, false);
+          let bestFinishDragDownIndex = highestOccurrence(mungingStandings, inYourDreams);  // hopefully this came out higher now
+          let bestFinishDragDown = bestFinishDragDownIndex+1;
+          //let thisClubId = leagueClubIndex[clubUnderTest];
+          //let thisClubName = leagueClubs[thisClubId].name;
+          console.log(bestFinishDragDown+"  ["+thisClubId+"] "+thisClubName+" (dragdown) with "+inYourDreams+" points");
+          bestJeanist[clubUnderTest] = bestFinishDragDown;
+ 
+
+          if (TABLE_DUMP) {
             console.log("\nleagueGrid");
             printGrid(leagueGrid);
             console.log("\nleagueStandings");
             console.log(leagueStandings);
             console.log("\n\n");
+
             console.log("\nperfectGrid");
             printGrid(perfectGrid);
             console.log("\nperfectStandings");
             console.log(perfectStandings);
             console.log("\n\n");
+
             console.log("\nothersAllDrawGrid");
             printGrid(othersAllDrawGrid);
             console.log("\nothersAllDrawStandings");
             console.log(othersAllDrawStandings);
+            console.log("\n\n");
+
+            console.log("\nmungingGrid");
+            printGrid(mungingGrid);
+            console.log("\nmungingStandings");
+            console.log(mungingStandings);
+            console.log("\n\n");
           }
-
-          // for this club that's ahead -
-          // calculate game count to flip (1 -> 0)
-
-          //for ()
 
         }
         
@@ -659,7 +761,7 @@ fetch('https://api.football-data.org/v2/competitions/PL/teams', {
       //workingGrid = deepCopyGrid(perfectGrid);  // fresh copy, our club best, unplayed matches undefined
       //workingStandings = calculateStandings(workingGrid, false);
 
-      if (bestFinish !== 1) {
+      if (bestJeanist[clubUnderTest] !== 1) {
         // starting with lowest clubs below ours, 
         // distribute wins until <= our club's points (then fill in with losses)
         // assign wins starting with highest-ranked opponets first (both home and away)
